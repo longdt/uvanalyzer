@@ -57,5 +57,5 @@ void adjustAutoLevels(cv::Mat& src, cv::Mat& dst);
 void drawHist(cv::Mat& src);
 void projectVertical(cv::Mat &input, std::vector<int> &output);
 void projectHorizontal(cv::Mat &input, std::vector<int> &output);
-
+cv::Rect maximalSquare(const cv::Mat& src);
 #endif /* INCLUDE_UVPROC_H_ */

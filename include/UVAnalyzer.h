@@ -14,7 +14,6 @@ class UVAnalyzer {
 public:
 	UVAnalyzer();
 	float checkValid(cv::Mat& uvImg);
-
 	virtual ~UVAnalyzer();
 };
 

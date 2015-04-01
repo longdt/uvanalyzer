@@ -106,3 +106,35 @@ void drawHist(cv::Mat& src) {
 	namedWindow("calcHist Demo", CV_WINDOW_AUTOSIZE);
 	imshow("calcHist Demo", histImage);
 }
+
+inline int min(int a, int b, int c) {
+	return std::min(a, std::min(b, c));
+}
+
+cv::Rect maximalSquare(const cv::Mat& src) {
+	cv::Mat result = cv::Mat::zeros(src.size(), CV_32SC1);
+	for (int r = 0; r < result.rows; ++r) {
+		result.at<int>(r, 0) = src.at<uchar>(r, 0) > 0 ? 1 : 0;
+	}
+	for (int c = 0; c < result.cols; ++c) {
+		result.at<int>(0, c) = src.at<uchar>(0, c) > 0 ? 1 : 0;
+	}
+	int max = 1;
+	int maxX = 0;
+	int maxY = 0;
+	for (int r = 1; r < result.rows; ++r) {
+		for (int c = 1; c < result.cols; ++c) {
+			if (src.at<uchar>(r, c) == 0) {
+				continue;
+			}
+			int t = min(result.at<int>(r - 1, c), result.at<int>(r - 1, c - 1), result.at<int>(r, c - 1)) + 1;
+			result.at<int>(r, c) = t;
+			if (t > max) {
+				max = t;
+				maxX = c;
+				maxY = r;
+			}
+		}
+	}
+	return cv::Rect(maxX - max + 1, maxY - max + 1, max, max);
+}

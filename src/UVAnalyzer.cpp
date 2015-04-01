@@ -15,9 +15,9 @@ using namespace cv;
 
 namespace icr {
 #define EPICK_HEIGHT 65
-#define EPICK_WIDTH 200
+#define EPICK_WIDTH 202
 #define EPICK_ON_BOTTOM 500
-
+#define BANK_TEXT_PADDING 15
 UVAnalyzer::UVAnalyzer() {
 
 }
@@ -157,7 +157,7 @@ int detectForm(cv::Mat& src, cv::Rect& area, vector<Rect>& rects) {
 	Mat botRight = src(botRoi);
 	float botScore = countNonZero(botRight) / (float) (botRight.rows * botRight.cols);
 	if (botScore < 0.3 && area.height < 3.5 * EPICK_HEIGHT) {
-		std::cout << "form 2" << std::endl;
+//		std::cout << "form 2" << std::endl;
 		return FORM2;
 	}
 	Rect topRoi(area.x, area.y, 4 * EPICK_WIDTH, EPICK_HEIGHT / 2);
@@ -169,7 +169,7 @@ int detectForm(cv::Mat& src, cv::Rect& area, vector<Rect>& rects) {
 	float midScore = countNonZero(midRight) / (float) (midRight.rows * midRight.cols);
 	form2Score = (form2Score + (3 - topScore - botScore - midScore) / 3) / 2;
 	if (form2Score > 0.7) {
-		std::cout << "form 3" << std::endl;
+//		std::cout << "form 3" << std::endl;
 		return FORM3;
 	}
 	return FORM1;
@@ -252,37 +252,43 @@ void findForm3Areas(cv::Mat& src, cv::Rect& area, vector<Rect>& rects) {
 }
 
 void detectAreas(cv::Mat& src, vector<Rect>& rects) {
-	std::vector<int> projects;
+	std::vector<int> projectsX;
 	//vertical
-	projectVertical(src, projects);
+	projectVertical(src, projectsX);
 	int thresX = src.rows / 7;
 	int startX = 10;
-	for (; startX < src.cols && projects[startX] < thresX; ++startX) {}
+	for (; startX < src.cols && projectsX[startX] < thresX; ++startX) {}
 	int endX = src.cols - 10;
-	for (; endX >= 0 && projects[endX] < thresX; --endX) {}
+	for (; endX >= 0 && projectsX[endX] < thresX; --endX) {}
 	//horizontal
-	projectHorizontal(src, projects);
+	std::vector<int> projectsY;
+	projectHorizontal(src, projectsY);
 	int thresY = src.cols / 4;
 	int startY = 10;
-	for (; startY < src.rows && projects[startY] < thresY; ++startY) {}
+	for (; startY < src.rows && projectsY[startY] < thresY; ++startY) {}
 	int endY = src.rows - 10;
-	for (; endY >= 0&& projects[endY] < thresY; --endY) {}
+	for (; endY >= 0&& projectsY[endY] < thresY; --endY) {}
 
 	if (endY - startY < src.rows * 0.28 || endX - startX < src.cols * 0.8) {
 		throw std::bad_exception();
 	} else if (endY > EPICK_ON_BOTTOM) {
 		//option epick on bottom
 		std::cout <<"epick on bottom" << std::endl;
+		//check contain bank text
+		if (endX - startX > 6 * EPICK_WIDTH + BANK_TEXT_PADDING) {
+			startX = endX - 6 * EPICK_WIDTH;
+		}
 		int startYBE = endY - 2 * EPICK_HEIGHT;
-		for (; startYBE < src.rows && projects[startYBE] < thresY; ++startYBE) {}
+		for (; startYBE < src.rows && projectsY[startYBE] < thresY; ++startYBE) {}
 		rects.push_back(Rect(startX, startYBE, endX- startX, endY - startYBE));
-		for (endY = endY - 2 * EPICK_HEIGHT; endY >= 0&& projects[endY] < thresY; --endY) {}
+		for (endY = endY - 2 * EPICK_HEIGHT; endY >= 0&& projectsY[endY] < thresY; --endY) {}
 		rects.push_back(Rect(startX, startY, endX- startX, endY - startY));
 		return;
 	}
 	//detect form 2
 	Rect area(startX, startY, endX- startX, endY - startY);
 	int type = detectForm(src, area, rects);
+	int bigAreaWidth = type == FORM1 ? 6 * EPICK_WIDTH : 4 * EPICK_WIDTH;
 	switch (type) {
 		case FORM1:
 			rects.push_back(area);
@@ -294,6 +300,24 @@ void detectAreas(cv::Mat& src, vector<Rect>& rects) {
 			findForm3Areas(src, area, rects);
 			break;
 	}
+	Rect& r = rects[0];
+	if (r.width > bigAreaWidth + BANK_TEXT_PADDING) {
+		r.x = r.x + r.width - bigAreaWidth;
+		r.width = bigAreaWidth;
+	}
+}
+
+float verifyArea(cv::Mat& src) {
+	Mat invertBi;
+	threshold(src, invertBi, 127, 255, THRESH_BINARY_INV);
+//	imshow("verify", binary);
+//	waitKey(0);
+	Rect rect = maximalSquare(invertBi);
+	if (rect.width >= 0.6 * EPICK_HEIGHT) {
+		rectangle(src, rect, Scalar(255,255, 255));
+		return 0;
+	}
+	return 1;
 }
 
 float UVAnalyzer::checkValid(cv::Mat& uvImg) {
@@ -304,19 +328,25 @@ float UVAnalyzer::checkValid(cv::Mat& uvImg) {
 	Mat bi;
 	threshold(dst, bi, 0, 255, THRESH_OTSU | THRESH_BINARY);
 	if (needLocalThreshold(bi)) {
-		std::cout << "perform local threshold" << std::endl;
+//		std::cout << "perform local threshold" << std::endl;
 		localThreshold(uvImg, bi);
 	}
 	vector<Rect> rects;
 	imshow("bi", bi);
 	detectAreas(bi, rects);
-	//debug print rects
+	//verify rects
+	int rc = 1;
 	for (Rect rect : rects) {
+		//debug print rects
 		rectangle(uvImg, rect, Scalar(255,255, 255));
+		Mat temp = bi(rect);
+		if (verifyArea(temp) == 0) {
+			rc = 0;
+		}
 	}
 	imshow("src", uvImg);
 	imshow("bi", bi);
-	return 1;
+	return rc;
 }
 
 
