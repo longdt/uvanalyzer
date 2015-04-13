@@ -157,7 +157,6 @@ int detectForm(cv::Mat& src, cv::Rect& area, vector<Rect>& rects) {
 	Mat botRight = src(botRoi);
 	float botScore = countNonZero(botRight) / (float) (botRight.rows * botRight.cols);
 	if (botScore < 0.3 && area.height < 3.5 * EPICK_HEIGHT) {
-//		std::cout << "form 2" << std::endl;
 		return FORM2;
 	}
 	Rect topRoi(area.x, area.y, 4 * EPICK_WIDTH, EPICK_HEIGHT / 2);
@@ -169,7 +168,6 @@ int detectForm(cv::Mat& src, cv::Rect& area, vector<Rect>& rects) {
 	float midScore = countNonZero(midRight) / (float) (midRight.rows * midRight.cols);
 	form2Score = (form2Score + (3 - topScore - botScore - midScore) / 3) / 2;
 	if (form2Score > 0.7) {
-//		std::cout << "form 3" << std::endl;
 		return FORM3;
 	}
 	return FORM1;
@@ -180,7 +178,7 @@ void findForm2Areas(cv::Mat& src, cv::Rect& area, vector<Rect>& rects) {
 	roi.width = roi.width -  2.2 * EPICK_WIDTH;
 	Mat temp = src(roi);
 	Rect r = findBoundingRect(temp, src.rows / 7.0f, src.cols / 4.0f);
-	if (r.width == 0 || r.height == 0) {
+	if (r.width == 0 || r.height == 0 || r.width < 3.3 * EPICK_WIDTH || r.height < 3 * EPICK_HEIGHT) {
 		throw std::bad_exception();
 	}
 	r.x += roi.x;
@@ -219,7 +217,7 @@ void findForm3Areas(cv::Mat& src, cv::Rect& area, vector<Rect>& rects) {
 	roi.width = roi.width -  2.2 * EPICK_WIDTH;
 	Mat temp = src(roi);
 	Rect r = findBoundingRect(temp, src.rows / 7.0f, src.cols / 4.0f);
-	if (r.width == 0 || r.height == 0) {
+	if (r.width == 0 || r.height == 0 || r.width < 3.3 * EPICK_WIDTH || r.height < 3 * EPICK_HEIGHT) {
 		throw std::bad_exception();
 	}
 	r.x += roi.x;
@@ -273,16 +271,16 @@ void detectAreas(cv::Mat& src, vector<Rect>& rects) {
 		throw std::bad_exception();
 	} else if (endY > EPICK_ON_BOTTOM) {
 		//option epick on bottom
-		std::cout <<"epick on bottom" << std::endl;
 		//check contain bank text
 		if (endX - startX > 6 * EPICK_WIDTH + BANK_TEXT_PADDING) {
 			startX = endX - 6 * EPICK_WIDTH;
 		}
 		int startYBE = endY - 2 * EPICK_HEIGHT;
 		for (; startYBE < src.rows && projectsY[startYBE] < thresY; ++startYBE) {}
-		rects.push_back(Rect(startX, startYBE, endX- startX, endY - startYBE));
+		Rect epickBot(startX, startYBE, endX- startX, endY - startYBE);
 		for (endY = endY - 2 * EPICK_HEIGHT; endY >= 0&& projectsY[endY] < thresY; --endY) {}
 		rects.push_back(Rect(startX, startY, endX- startX, endY - startY));
+		rects.push_back(epickBot);
 		return;
 	}
 	//detect form 2
@@ -320,6 +318,15 @@ float verifyArea(cv::Mat& src) {
 	return 1;
 }
 
+void threshold(cv::Mat& src, cv::Mat& dst, vector<Rect>& rects) {
+	Rect rect = rects[0];
+	double thres = threshold(src(rect), dst(rect), 0, 255, THRESH_OTSU | THRESH_BINARY);
+	for (int i = 1; i < rects.size(); ++i) {
+		rect = rects[i];
+		threshold(src(rect), dst(rect), thres, 255, THRESH_BINARY);
+	}
+}
+
 float UVAnalyzer::checkValid(cv::Mat& uvImg) {
 	Mat dst;
 	adjustAutoLevels(uvImg, dst);
@@ -327,13 +334,16 @@ float UVAnalyzer::checkValid(cv::Mat& uvImg) {
 	drawHist(dst);
 	Mat bi;
 	threshold(dst, bi, 0, 255, THRESH_OTSU | THRESH_BINARY);
-	if (needLocalThreshold(bi)) {
-//		std::cout << "perform local threshold" << std::endl;
+	bool localThres = needLocalThreshold(bi);
+	if (localThres) {
 		localThreshold(uvImg, bi);
 	}
 	vector<Rect> rects;
 	imshow("bi", bi);
 	detectAreas(bi, rects);
+	if (!localThres) {
+		threshold(uvImg, bi, rects);
+	}
 	//verify rects
 	int rc = 1;
 	for (Rect rect : rects) {

@@ -20,7 +20,7 @@ using namespace cv;
 using namespace std;
 
 int main(int argc, char **argv) {
-	path p("/media/thienlong/linux/UV Cheque/Original UV Images/");
+	path p("/media/thienlong/linux/UV Cheque/UV/");
 	if (!exists(p) || !is_directory(p)) {
 		return 0;
 	}
@@ -30,14 +30,18 @@ int main(int argc, char **argv) {
 	UVAnalyzer analyzer;
 	for (auto iter = files.begin(), iterend = files.end(); iter != iterend; ++iter) {
 		string file = iter->string();
-//		file = "/media/thienlong/linux/UV Cheque/Altered UV Images/abc_00016_04.TIF";
+//		if (file.compare("/media/thienlong/linux/UV Cheque/UV/abc_00005_04.TIF") != 0) continue;
 		cout << file << endl;
 		Mat src = cv::imread(file, 0);
 		if (src.empty()) {
 			continue;
 		}
 		imshow("src", src);
-		cout << (analyzer.checkValid(src) ? "valid" : "invalid") << endl;
+		try {
+			cout << (analyzer.checkValid(src) ? "valid" : "invalid") << endl;
+		} catch (const exception &e) {
+			cout << "invalid" << endl;
+		}
 		waitKey(0);
 	}
 }
